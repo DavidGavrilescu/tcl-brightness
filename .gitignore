@@ -1,0 +1,17 @@
+/target/
+/.tools/
+/work/
+/bin/
+/dist/
+/.vscode/
+/.idea/
+**/selected-monitor.txt
+.env
+.env.*
+*.log
+*.pem
+*.key
+*.pfx
+*.p12
+Thumbs.db
+.DS_Store
