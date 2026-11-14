@@ -276,6 +276,7 @@ fn displays() -> Result<Vec<Display>, String> {
                 d.path = utf16(&chars[82..210]);
                 if !d.name.to_uppercase().contains("27C2A")
                     && !d.path.to_uppercase().contains("TCL2005")
+                    && !d.name.eq_ignore_ascii_case("G27Q")
                 {
                     continue;
                 }
@@ -377,6 +378,18 @@ fn read_backlight(d: &Display) -> Result<u32, String> {
 }
 fn write_backlight(d: &Display, value: u32) -> Result<(), String> {
     with_physical(d, |h| unsafe {
+        if d.name.eq_ignore_ascii_case("G27Q") {
+            if SetMonitorBrightness(h, value) != 0 {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(90));
+            if SetVCPFeature(h, 0x10, value) != 0 {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                return Ok(());
+            }
+            return Err("Monitor is busy. Try again.".into());
+        }
         let (mut min, mut current, mut max) = (0, 0, 0);
         if GetMonitorBrightness(h, &mut min, &mut current, &mut max) != 0
             && max > min
@@ -509,6 +522,7 @@ fn status_json(d: &Display) -> Result<String, String> {
         json(&d.path)
     ))
 }
+
 fn cli(args: &[String]) -> Result<String, String> {
     let query = args
         .iter()

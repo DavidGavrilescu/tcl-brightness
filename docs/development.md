@@ -8,13 +8,14 @@ The app uses Rust's standard library and Win32 APIs. It has no external crates.
 cargo fmt --check
 cargo build --release
 .\verify.ps1
+.\verify.ps1 -Monitor G27Q
 ```
 
-`verify.ps1` reads brightness, changes it by one point, checks the result, and restores the original value. It requires a connected TCL 27C2A. An unsupported monitor must never be selected as a fallback.
+`verify.ps1` reads brightness, changes it by one point, checks the result, and restores the original value. It requires a connected supported display. An unsupported monitor must never be selected as a fallback.
 
 ## Controls
 
-The flyout uses native accessible controls, dark styling, rounded corners, and per-monitor DPI scaling. It dismisses on focus loss or Escape. Slider writes are debounced by 100 ms. Failed commands retain the last confirmed brightness and allow another attempt. DDC/CI uses bounded retries and both high-level monitor APIs and VCP controls.
+The flyout uses native accessible controls, dark styling, rounded corners, and per-monitor DPI scaling. It dismisses on focus loss or Escape. Slider writes are debounced by 100 ms and run on a background worker. Pending writes are coalesced, and older results cannot overwrite a newer slider request. Failed commands retain the last confirmed brightness and allow another attempt. DDC/CI uses bounded retries and both high-level monitor APIs and VCP controls.
 
 With HDR enabled, the app reads Windows SDR white level and sets it through the private `DisplayConfigSetDeviceInfo` request `0xFFFFFFEE`. This adjusts desktop brightness from 80 to 480 nits. HDR remains enabled. This private setter may require changes after a Windows update.
 
@@ -37,3 +38,11 @@ Start-Process '.\bin\TCL Brightness.exe' -ArgumentList '--quit' -Wait
 ## Uninstall
 
 Exit the app, remove its Start menu and Startup shortcuts, then delete the executable folder.
+
+## Gigabyte G27Q
+
+The G27Q uses a known brightness range of 0–100. Send the brightness change directly, wait for the monitor to settle, and then read back the result. Do not require a successful range read before sending a change: this monitor can reject or delay reads temporarily. Retry busy monitor operations with a short pause. Use SetMonitorBrightness with SetVCPFeature as a fallback.
+
+The app uses Windows monitor APIs only. It does not load NVAPI, install a driver, hook keyboards, read game memory, inject code, or modify game files. The tray shortcut uses RegisterHotKey. Startup is a normal Windows shortcut created by install.ps1.
+
+The executable is unsigned. A clean antivirus scan is useful evidence, but cannot guarantee every antivirus or anti-cheat product's decision. Do not disable security protections or add broad exclusions to run the app.

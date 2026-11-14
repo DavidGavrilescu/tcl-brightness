@@ -1,6 +1,6 @@
 # TCL Brightness
 
-A small Windows tray app for adjusting TCL 27C2A brightness. Built with Rust.
+A small Windows tray app for adjusting TCL 27C2A and Gigabyte G27Q brightness. Built with Rust.
 
 ## Use
 
@@ -10,7 +10,7 @@ Run `TCL Brightness.exe`, then click the sun icon by the clock and move the slid
 - **HDR off:** adjusts the monitor backlight through DDC/CI.
 - **Keyboard:** Win + Alt + Page Up / Down adjusts brightness by 5%.
 
-Windows 11 required. Supports the TCL 27C2A; other models are not supported. No ads, tracking, network access, or paid dependencies.
+Windows 11 required. Supports the TCL 27C2A and Gigabyte G27Q. No ads, tracking, network access, or paid dependencies. The app does not access game processes or modify game files.
 
 ## Build
 

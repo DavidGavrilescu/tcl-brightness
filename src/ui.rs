@@ -62,6 +62,8 @@ const ACCENT: u32 = 0xffc98e;
 const SHOW: u32 = 0x8001;
 const TRAY: u32 = 0x8002;
 const QUIT: u32 = 0x8003;
+const APPLIED: u32 = 0x8004;
+static mut LATEST_JOB: u64 = 0;
 const STYLE: u32 = 0x82040000;
 static mut SLIDER: H = null_mut();
 static mut SELECTOR: H = null_mut();
@@ -199,12 +201,63 @@ unsafe fn refresh() {
     }
     update(selected_display().and_then(|d| brightness(&d).map(|v| (d, v))));
 }
+
+struct Job {
+    display: Display,
+    value: u32,
+    sequence: u64,
+}
+type Completed = (String, u64, Result<(Display, u32), String>);
+static WORKER: std::sync::OnceLock<std::sync::mpsc::Sender<Job>> = std::sync::OnceLock::new();
 unsafe fn apply(v: u32) {
-    update(selected_display().and_then(|d| {
-        set_brightness(&d, v)?;
-        let actual = brightness(&d)?;
-        Ok((d, actual))
-    }));
+    let d = match selected_display() {
+        Ok(d) => d,
+        Err(e) => {
+            update(Err(e));
+            return;
+        }
+    };
+    let handle = MAIN as usize;
+    let sender = WORKER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<Job>();
+        std::thread::spawn(move || {
+            while let Ok(mut job) = rx.recv() {
+                while let Ok(newer) = rx.try_recv() {
+                    job = newer;
+                }
+                let path = job.display.path.clone();
+                let result = displays()
+                    .and_then(|all| {
+                        all.into_iter()
+                            .find(|d| d.path == path)
+                            .ok_or("Display disconnected.".to_string())
+                    })
+                    .and_then(|d| {
+                        set_brightness(&d, job.value)?;
+                        let actual = brightness(&d)?;
+                        Ok((d, actual))
+                    });
+                let payload = Box::into_raw(Box::new((path, job.sequence, result)));
+                if PostMessageW(handle as H, APPLIED, 0, payload as isize) == 0 {
+                    drop(Box::from_raw(payload));
+                }
+            }
+        });
+        tx
+    });
+    LATEST_JOB = LATEST_JOB.wrapping_add(1);
+    set_text(VALUE, &format!("{v}%"));
+    SendMessageW(SLIDER, 0x405, 1, v as isize);
+    if sender
+        .send(Job {
+            display: d,
+            value: v,
+            sequence: LATEST_JOB,
+        })
+        .is_err()
+    {
+        update(Err("Display control stopped. Reopen the app.".into()));
+    }
 }
 unsafe fn flush(hwnd: H) {
     KillTimer(hwnd, 1);
@@ -575,6 +628,14 @@ unsafe fn quit(hwnd: H) {
 }
 unsafe extern "system" fn wndproc(hwnd: H, msg: u32, wp: usize, lp: isize) -> isize {
     match msg {
+        APPLIED => {
+            let result = Box::from_raw(lp as *mut Completed);
+            let selected = SELECTED.with(|s| s.borrow().clone());
+            if result.1 == LATEST_JOB && !PENDING && selected.as_ref() == Some(&result.0) {
+                update(result.2);
+            }
+            return 0;
+        }
         0x83 if wp != 0 => return 0,
         0x06 if wp & 0xffff == 0 && !MENU_OPEN => {
             flush(hwnd);
@@ -679,19 +740,28 @@ unsafe extern "system" fn wndproc(hwnd: H, msg: u32, wp: usize, lp: isize) -> is
             }
             return 0;
         }
+
         0x312 => {
             flush(hwnd);
-            update(selected_display().and_then(|d| {
-                let v = brightness(&d)?;
-                let v = if wp == 1 {
+            let result = selected_display().and_then(|d| {
+                let cached = LAST_GOOD
+                    .with(|s| s.borrow().clone())
+                    .filter(|(path, _)| path == &d.path);
+                let v = if cached.is_some() {
+                    SendMessageW(SLIDER, 0x400, 0, 0) as u32
+                } else {
+                    brightness(&d)?
+                };
+                Ok(if wp == 1 {
                     v.saturating_add(5).min(100)
                 } else {
                     v.saturating_sub(5)
-                };
-                set_brightness(&d, v)?;
-                let actual = brightness(&d)?;
-                Ok((d, actual))
-            }));
+                })
+            });
+            match result {
+                Ok(v) => apply(v),
+                Err(e) => update(Err(e)),
+            }
             return 0;
         }
         0x7e => {
@@ -751,7 +821,7 @@ pub unsafe fn run(args: &[String]) {
         return;
     }
     if let Ok(key) = std::fs::read_to_string(selected_file()) {
-        if key.to_uppercase().contains("TCL2005") {
+        if key.to_uppercase().contains("TCL2005") || key.to_uppercase().contains("GBT2709") {
             SELECTED.with(|s| *s.borrow_mut() = Some(key));
         }
     }

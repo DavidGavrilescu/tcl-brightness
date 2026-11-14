@@ -1,3 +1,4 @@
+param([string]$Monitor='27C2A')
 $ErrorActionPreference='Stop'
 $binary=Join-Path $PSScriptRoot 'target\release\tcl-brightness.exe'
 $work=Join-Path $PSScriptRoot 'work'
@@ -9,14 +10,14 @@ function Invoke-Brightness([string[]]$Arguments,[string]$Name){
     Get-Content -LiteralPath $result -Raw
 }
 Invoke-Brightness @('--self-test') 'selftest.txt'
-$before=Invoke-Brightness @('--status') 'before.json' | ConvertFrom-Json
+$before=Invoke-Brightness @('--status','--monitor',$Monitor) 'before.json' | ConvertFrom-Json
 try{
     $requested=if($before.brightness -gt 0){$before.brightness-1}else{1}
-    $after=Invoke-Brightness @('--set',"$requested") 'changed.json' | ConvertFrom-Json
+    $after=Invoke-Brightness @('--set',"$requested",'--monitor',$Monitor) 'changed.json' | ConvertFrom-Json
     if($after.brightness -ne $requested -or $after.mode -ne $before.mode){throw 'Brightness read-back failed'}
     'Monitor brightness changed and read back successfully.'
 }finally{
-    $restored=Invoke-Brightness @('--set',"$($before.brightness)") 'restored.json' | ConvertFrom-Json
+    $restored=Invoke-Brightness @('--set',"$($before.brightness)",'--monitor',$Monitor) 'restored.json' | ConvertFrom-Json
     if($restored.brightness -ne $before.brightness){throw 'Original brightness was not restored'}
     'Original brightness restored.'
 }

@@ -1,9 +1,9 @@
 [package]
 name = "tcl-brightness"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
-description = "A small Windows tray app for TCL 27C2A brightness"
+description = "A small Windows tray app for TCL 27C2A and Gigabyte G27Q brightness"
 
 [profile.release]
 opt-level = "s"
